@@ -25,8 +25,8 @@ def get_config():
 
 with DAG(
     dag_id='youtube_sentiment_analysis_v1',
-    start_date=datetime(2026, 1, 1, 8, 30),
-    schedule='@daily',
+    start_date=datetime(2026, 1, 2, tz="Europe/Rome"), 
+    schedule="30 8 * * *",  # Ежедневно в 08:30 утра
     catchup=True,
     max_active_runs=1,
     tags=['youtube', 'sentiment_analysis'],

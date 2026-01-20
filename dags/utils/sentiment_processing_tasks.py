@@ -3,7 +3,9 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from transformers import pipeline
 
 @task
-def analyze_comments_sentiment(comments, ds=None):
+def analyze_comments_sentiment(comments, ds=None, **context):
+    yesterday_ds = context['macros'].ds_add(ds, -1)
+
     if not comments:
         return []
 
@@ -26,7 +28,7 @@ def analyze_comments_sentiment(comments, ds=None):
             'label': pred['label'],
             'score': pred['score'],
             'model_name': model_path,
-            'processed_date': ds
+            'processed_date': yesterday_ds
         })
     
     return results

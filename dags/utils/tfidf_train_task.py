@@ -1,24 +1,27 @@
 import logging
 import os
+import matplotlib.pyplot as plt
 from airflow.decorators import task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pandas as pd
 import joblib
 import mlflow
 import mlflow.sklearn
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, mean_squared_error, f1_score, mean_absolute_error
+from sklearn.metrics import (
+    accuracy_score, mean_squared_error, f1_score, 
+    mean_absolute_error, ConfusionMatrixDisplay
+)
 
 @task
 def train_sentiment_model(EXPERIMENT_NAME, ds=None, **context):
     yesterday_ds = context['macros'].ds_add(ds, -1)
-
     pg_hook = PostgresHook(postgres_conn_id='postgres_ubuntu')
     
-    # 1. Загрузка данных (связываем текст комментария с его меткой и скором)
+    # 1. Загрузка данных
     query = """
         SELECT c.text_display, s.label, s.score 
         FROM youtube_comments c
@@ -26,90 +29,106 @@ def train_sentiment_model(EXPERIMENT_NAME, ds=None, **context):
     """
     df = pg_hook.get_pandas_df(query)
 
-    n_samples = len(df)
-    # Эвристика: не более 50% от количества документов, но в разумных пределах
-    calculated_max_features = min(10000, max(1000, n_samples // 2))
-    
-    if len(df) < 20:  # Минимальный порог данных для обучения
-        logging.info("Недостаточно данных для обучения модели.")
+    if len(df) < 50:  # Grid Search требует больше данных для кросс-валидации
+        logging.info("Недостаточно данных для запуска Grid Search.")
         return
     
-    # Подготовка данных
-    # Для классификации (positive, neutral, negative)
-    # Для регрессии (уверенность модели)
     X = df['text_display']
     Y = df[['label', 'score']]
 
-    # Разделение данных: 80% на обучение, 20% на тест
-    # Используем random_state для воспроизводимости результатов
     X_train, X_test, y_train, y_test = train_test_split(
-        X, 
-        Y, 
-        test_size=0.2, 
-        random_state=42,
-        stratify=Y['label'] # Чтобы пропорции классов (pos/neg) были одинаковы в обеих частях
+        X, Y, test_size=0.2, random_state=42, stratify=Y['label']
     )
 
-    y_train_class = y_train['label']
-    y_test_class = y_test['label']
-
-    y_train_reg = y_train['score']   
-    y_test_reg = y_test['score']
-
     # Настройка MLflow
-    mlflow.set_tracking_uri("http://localhost:5000") # Или путь к локальной папке
+    mlflow.set_tracking_uri("http://localhost:5000")
     mlflow.set_experiment(EXPERIMENT_NAME)
 
-    with mlflow.start_run(run_name=f"train_{yesterday_ds}"):
-        # --- Часть 1: Классификация (Label) ---
-        class_pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=calculated_max_features, stop_words='english')),
+    with mlflow.start_run(run_name=f"train_grid_search_{yesterday_ds}"):
+        
+        # --- ШАГ 1: Grid Search для Классификации ---
+        # Мы ищем лучшие параметры TF-IDF и Логистической регрессии одновременно
+        base_class_pipeline = Pipeline([
+            ('tfidf', TfidfVectorizer(stop_words='english')),
             ('clf', LogisticRegression(max_iter=1000, class_weight='balanced'))
         ])
+
+        param_grid = {
+            'tfidf__max_features': [2500, 5000, 10000, 15000],
+            'tfidf__ngram_range': [(1, 1), (1, 2)], # Униграммы и биграммы
+            'tfidf__min_df': [2, 5],
+            'clf__C': [0.1, 1.0, 10.0] # Сила регуляризации
+        }
+
+        logging.info("Запуск GridSearchCV для классификатора...")
+        grid_search = GridSearchCV(
+            base_class_pipeline, 
+            param_grid, 
+            cv=3, 
+            scoring='accuracy', 
+            n_jobs=-1,
+            verbose=1
+        )
+        grid_search.fit(X_train, y_train['label'])
         
-        class_pipeline.fit(X_train, y_train_class)
+        class_pipeline = grid_search.best_estimator_
+        best_params = grid_search.best_params_
+
+        # Метрики классификации
         y_pred_class = class_pipeline.predict(X_test)
-        # Считаем метрики на обеих частях
-        acc_test = accuracy_score(y_test_class, y_pred_class)
-        acc_train = accuracy_score(y_train_class, class_pipeline.predict(X_train))
-        f1 = f1_score(y_test_class, y_pred_class, average='weighted')
-        
-        # --- Часть 2: Регрессия (Score) ---
+        acc_test = accuracy_score(y_test['label'], y_pred_class)
+        acc_train = accuracy_score(y_train['label'], class_pipeline.predict(X_train))
+        f1 = f1_score(y_test['label'], y_pred_class, average='weighted')
+
+        # --- ШАГ 2: Регрессия с лучшими параметрами TF-IDF ---
+        # Используем те же параметры TF-IDF, которые победили в классификации
         reg_pipeline = Pipeline([
-            ('tfidf', TfidfVectorizer(max_features=calculated_max_features, stop_words='english')),
+            ('tfidf', TfidfVectorizer(
+                stop_words='english',
+                max_features=best_params['tfidf__max_features'],
+                ngram_range=best_params['tfidf__ngram_range'],
+                min_df=best_params['tfidf__min_df']
+            )),
             ('reg', Ridge())
         ])
         
-        reg_pipeline.fit(X_train, y_train_reg)
+        reg_pipeline.fit(X_train, y_train['score'])
         y_pred_reg = reg_pipeline.predict(X_test)
-        # Считаем метрики на обеих частях
-        mse_test = mean_squared_error(y_test_reg, y_pred_reg)
-        mse_train = mean_squared_error(y_train_reg, reg_pipeline.predict(X_train))
+        
+        mse_test = mean_squared_error(y_test['score'], y_pred_reg)
+        mse_train = mean_squared_error(y_train['score'], reg_pipeline.predict(X_train))
+        mae = mean_absolute_error(y_test['score'], y_pred_reg)
 
-        mae = mean_absolute_error(y_test_reg, y_pred_reg)
-
-        # Логирование в MLflow
-        mlflow.log_param("model_type", "tfidf_logistic_ridge")
-        mlflow.log_param("max_features", calculated_max_features)
+        # --- Логирование в MLflow ---
+        mlflow.log_params(best_params)
+        mlflow.log_param("grid_search_status", "completed")
         
         mlflow.log_metric("accuracy_train", acc_train)
         mlflow.log_metric("accuracy_test", acc_test)
+        mlflow.log_metric("acc_gap", abs(acc_test - acc_train))
+        mlflow.log_metric("f1_score", f1)
+        
         mlflow.log_metric("mse_train", mse_train)
         mlflow.log_metric("mse_test", mse_test)
-        # Также полезно логировать разницу (Overfitting Ratio)
-        mlflow.log_metric("acc_gap", abs(acc_test - acc_train))
-        mlflow.log_metric("mse_gap", abs(mse_test - mse_train))
-
-        mlflow.log_metric("f1_score", f1)
         mlflow.log_metric("mae_score", mae)
-        
-        # Сохранение моделей
+
+        # Логирование Confusion Matrix как артефакт
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ConfusionMatrixDisplay.from_predictions(
+            y_test['label'], y_pred_class, 
+            display_labels=class_pipeline.classes_, 
+            cmap=plt.cm.Blues, ax=ax
+        )
+        plt.title(f"Confusion Matrix {yesterday_ds}")
+        mlflow.log_figure(fig, "confusion_matrix.png")
+        plt.close(fig)
+
+        # Сохранение моделей в MLflow
         mlflow.sklearn.log_model(class_pipeline, "classifier_model")
         mlflow.sklearn.log_model(reg_pipeline, "regressor_model")
         
-        # Сохраняем классификатор локально для быстрого доступа из FastAPI
+        # Сохранение локального бандла для FastAPI
         model_path = "/home/oleksandr/apps/comments-sentiment-analysis/models/sentiment_models_bundle.pkl"
-        #model_path = "/home/oleksandr/apps/comments-sentiment-analysis/models/sentiment_model.pkl"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
         model_pack = {
@@ -117,13 +136,13 @@ def train_sentiment_model(EXPERIMENT_NAME, ds=None, **context):
             'regressor': reg_pipeline,
             'metadata': {
                 'trained_at': yesterday_ds,
-                'model_name': 'TF-IDF + Logistic/Ridge'
+                'model_name': 'TF-IDF GridSearch Optimized',
+                'best_params': best_params
             }
         }
-        #joblib.dump(class_pipeline, model_path)
         joblib.dump(model_pack, model_path)
         
-        logging.info(f"Модель обучена. Accuracy: {acc_test:.4f}, MSE: {mse_test:.4f}")
+        logging.info(f"Grid Search завершен. Лучшая Accuracy: {acc_test:.4f}. Params: {best_params}")
 
         save_model_data(class_pipeline)
 

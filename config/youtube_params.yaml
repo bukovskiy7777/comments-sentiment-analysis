@@ -1,8 +1,8 @@
 topic_1:
   SEARCH_QUERY: psychology
   YOUTUBE_API_KEY: AIzaSyDDZaDiAIPPgo7PQdKFNuLcHmhbd17r658
-  VIDEOS_LIMIT: 5
-  COMMENTS_LIMIT: 100
+  VIDEOS_LIMIT: 25
+  COMMENTS_LIMIT: 500
   RELEVANCE_LANGUAGE: "en"
   REGION_CODE: "US"
-  EXPERIMENT_NAME: "psychology__sentiment_tfidf"
+  EXPERIMENT_NAME: "psychology__sentiment__tfidf"

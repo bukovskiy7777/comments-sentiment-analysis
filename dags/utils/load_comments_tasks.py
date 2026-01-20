@@ -5,9 +5,11 @@ from googleapiclient.discovery import build
 
 
 @task
-def fetch_top_videos_from_youtube(YOUTUBE_API_KEY, SEARCH_QUERY, VIDEOS_LIMIT, RELEVANCE_LANGUAGE, REGION_CODE, ds=None):
+def fetch_top_videos_from_youtube(YOUTUBE_API_KEY, SEARCH_QUERY, VIDEOS_LIMIT, RELEVANCE_LANGUAGE, REGION_CODE, ds=None, **context):
+    yesterday_ds = context['macros'].ds_add(ds, -1)
+
     youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-    time_start, time_end = f"{ds}T00:00:00Z", f"{ds}T23:59:59Z"
+    time_start, time_end = f"{yesterday_ds}T00:00:00Z", f"{yesterday_ds}T23:59:59Z"
 
     # Поиск видео
     video_items = []
@@ -58,7 +60,7 @@ def fetch_top_videos_from_youtube(YOUTUBE_API_KEY, SEARCH_QUERY, VIDEOS_LIMIT, R
                 'channel_id': video['snippet']['channelId'],
                 'channel_title': video['snippet']['channelTitle'],
                 'search_query': SEARCH_QUERY,
-                'processed_date': ds,
+                'processed_date': yesterday_ds,
                 'channel_country': REGION_CODE
             })
 
@@ -75,12 +77,20 @@ def save_videos_to_postgres(videos):
     fields = ['video_id', 'title', 'published_at', 'channel_id', 'channel_title', 'search_query', 'processed_date', 'channel_country']
     rows = [tuple(v[f] for f in fields) for v in videos]
     
-    pg_hook.insert_rows(table='youtube_videos', rows=rows, target_fields=fields)
+    pg_hook.insert_rows(
+        table='youtube_videos', 
+        rows=rows, 
+        target_fields=fields,
+        replace=True, # Если анализ перезапсукается, обновляем данные
+        replace_index=['video_id']
+        )
     logging.info(f"Успешно сохранено {len(rows)} видео.")
 
 
 @task
-def fetch_comments_for_videos(YOUTUBE_API_KEY, videos, COMMENTS_LIMIT, ds=None):
+def fetch_comments_for_videos(YOUTUBE_API_KEY, videos, COMMENTS_LIMIT, ds=None, **context):
+    yesterday_ds = context['macros'].ds_add(ds, -1)
+
     if not videos:
         logging.info("Нет видео для получения комментариев.")
         return []
@@ -117,7 +127,7 @@ def fetch_comments_for_videos(YOUTUBE_API_KEY, videos, COMMENTS_LIMIT, ds=None):
                         'author_name': snippet['authorDisplayName'],
                         'published_at': snippet['publishedAt'],
                         'like_count': snippet['likeCount'],
-                        'processed_date': ds
+                        'processed_date': yesterday_ds
                     })
                 
                 comments_collected += len(response.get('items', []))
@@ -148,6 +158,8 @@ def save_comments_to_postgres(comments):
         table='youtube_comments', 
         rows=rows, 
         target_fields=fields,
+        replace=True, # Если анализ перезапсукается, обновляем данные
+        replace_index=['comment_id'],
         commit_every=1000 # Оптимизация для больших объемов данных
     )
     logging.info(f"Успешно сохранено {len(rows)} комментариев.")
