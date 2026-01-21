@@ -123,6 +123,11 @@ This project is for educational purposes and social data analysis.
 
 ---
 
+## 📊 Confusion Matrix
+<img width="800" height="600" alt="confusion_matrix" src="https://github.com/user-attachments/assets/b49edfa1-d85d-4557-a8ee-3077b7258ade" />
+
+---
+
 Author: Oleksandr
 
 Updated: January 2026
