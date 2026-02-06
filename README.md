@@ -13,6 +13,10 @@ This project is an ETL pipeline and ML service designed to:
 6. **Track** model metrics, parameters, and versions using MLflow.
 7. **Serve** the trained model via a REST API (FastAPI).
 
+**DAG structure**
+<img width="1156" height="193" alt="youtube_sentiment_analysis_v1-graph" src="https://github.com/user-attachments/assets/0991ce9e-5274-4937-a817-525f45ee4970" />
+
+
 ---
 
 ## 🛠 Tech Stack
