@@ -123,6 +123,37 @@ This project is for educational purposes and social data analysis.
 
 ---
 
+## 📊 Confusion Matrix
+<img width="800" height="600" alt="confusion_matrix" src="https://github.com/user-attachments/assets/b49edfa1-d85d-4557-a8ee-3077b7258ade" />
+
+---
+
+## 🧠 How the Model Works (Inference Logic)
+
+The trained model uses a combination of **TF-IDF Vectorization** and **Logistic Regression**. The prediction process follows these three steps:
+
+#### 1. Linear Combination (Z-Score)
+First, the model calculates a "raw score" ($Z$) for each sentiment class (Positive, Negative, Neutral). It multiplies the **TF-IDF weight** of each word in the comment by its corresponding **learned coefficient**:
+
+$$Z = \beta_0 + \sum_{i=1}^{n} (\text{TF-IDF}_i \times \text{Coefficient}_i)$$
+
+*   **Positive Coefficients** (e.g., *thank*: 6.71, *great*: 4.68) increase the score for that class.
+*   **Negative Coefficients** decrease the score, pushing the prediction away from that class.
+*   $\beta_0$ is the **Intercept**, representing the baseline bias for the class.
+
+#### 2. Softmax Transformation
+Since the raw score $Z$ can be any real number, the model applies the **Softmax function** to convert these scores into probabilities that sum up to 1 (100%):
+
+$$P(\text{class}) = \frac{e^{Z_{\text{class}}}}{\sum_{j \in \{\text{pos, neu, neg}\}} e^{Z_j}}$$
+
+This step ensures we get a valid probability distribution across all possible labels.
+
+#### 3. Classification and Confidence Score
+*   **Label Assignment:** The model selects the class with the highest probability $P$ as the final prediction.
+*   **Confidence Score:** The resulting probability value (from 0 to 1) is used as the **Score**, indicating how confident the model is in its decision.
+
+---
+
 Author: Oleksandr
 
 Updated: January 2026
