@@ -1,5 +1,7 @@
 from airflow import DAG
 from pendulum import datetime
+from airflow.timetables.interval import CronDataIntervalTimetable
+
 from utils.load_comments_tasks import (
     fetch_top_videos_from_youtube, 
     save_videos_to_postgres,
@@ -25,8 +27,8 @@ def get_config():
 
 with DAG(
     dag_id='youtube_sentiment_analysis_v1',
-    start_date=datetime(2026, 1, 2, tz="Europe/Rome"), 
-    schedule="30 8 * * *",  # Ежедневно в 08:30 утра
+    start_date=datetime(2026, 1, 1), 
+    schedule=CronDataIntervalTimetable("30 8 * * *", timezone="Europe/Rome"),  # Ежедневно в 08:30 утра, CronDataIntervalTimetable - обеспечивает data_interval_start=вчера 08-30 и data_interval_end=сегодня 08-30. ds=вчера
     catchup=True,
     max_active_runs=1,
     tags=['youtube', 'sentiment_analysis'],

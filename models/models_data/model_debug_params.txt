@@ -1,8 +1,8 @@
 memory: None
-steps: [('tfidf', TfidfVectorizer(max_features=10000, min_df=2, stop_words='english')), ('clf', LogisticRegression(class_weight='balanced', max_iter=1000))]
+steps: [('tfidf', TfidfVectorizer(max_features=10000, stop_words='english')), ('clf', LogisticRegression(class_weight='balanced', max_iter=1000))]
 transform_input: None
 verbose: False
-tfidf: TfidfVectorizer(max_features=10000, min_df=2, stop_words='english')
+tfidf: TfidfVectorizer(max_features=10000, stop_words='english')
 clf: LogisticRegression(class_weight='balanced', max_iter=1000)
 tfidf__analyzer: word
 tfidf__binary: False
@@ -13,7 +13,7 @@ tfidf__input: content
 tfidf__lowercase: True
 tfidf__max_df: 1.0
 tfidf__max_features: 10000
-tfidf__min_df: 2
+tfidf__min_df: 1
 tfidf__ngram_range: (1, 1)
 tfidf__norm: l2
 tfidf__preprocessor: None

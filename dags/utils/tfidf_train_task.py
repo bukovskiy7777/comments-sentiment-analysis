@@ -18,7 +18,8 @@ from sklearn.metrics import (
 
 @task
 def train_sentiment_model(EXPERIMENT_NAME, ds=None, **context):
-    yesterday_ds = context['macros'].ds_add(ds, -1)
+    # yesterday_ds = context['macros'].ds_add(ds, -1)
+    yesterday_ds = ds
     pg_hook = PostgresHook(postgres_conn_id='postgres_ubuntu')
     
     # 1. Загрузка данных

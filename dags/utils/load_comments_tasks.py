@@ -6,7 +6,8 @@ from googleapiclient.discovery import build
 
 @task
 def fetch_top_videos_from_youtube(YOUTUBE_API_KEY, SEARCH_QUERY, VIDEOS_LIMIT, RELEVANCE_LANGUAGE, REGION_CODE, ds=None, **context):
-    yesterday_ds = context['macros'].ds_add(ds, -1)
+    # yesterday_ds = context['macros'].ds_add(ds, -1)
+    yesterday_ds = ds
 
     youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
     time_start, time_end = f"{yesterday_ds}T00:00:00Z", f"{yesterday_ds}T23:59:59Z"
@@ -89,7 +90,8 @@ def save_videos_to_postgres(videos):
 
 @task
 def fetch_comments_for_videos(YOUTUBE_API_KEY, videos, COMMENTS_LIMIT, ds=None, **context):
-    yesterday_ds = context['macros'].ds_add(ds, -1)
+    # yesterday_ds = context['macros'].ds_add(ds, -1)
+    yesterday_ds = ds
 
     if not videos:
         logging.info("Нет видео для получения комментариев.")

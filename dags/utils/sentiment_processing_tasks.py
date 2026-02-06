@@ -4,7 +4,8 @@ from transformers import pipeline
 
 @task
 def analyze_comments_sentiment(comments, ds=None, **context):
-    yesterday_ds = context['macros'].ds_add(ds, -1)
+    # yesterday_ds = context['macros'].ds_add(ds, -1)
+    yesterday_ds = ds
 
     if not comments:
         return []

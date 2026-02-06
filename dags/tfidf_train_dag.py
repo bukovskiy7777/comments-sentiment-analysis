@@ -1,5 +1,7 @@
 from airflow import DAG
 from pendulum import datetime
+from airflow.timetables.interval import CronDataIntervalTimetable
+
 from utils.tfidf_train_task import train_sentiment_model
 
 #import os
@@ -15,8 +17,8 @@ def get_config():
 
 with DAG(
     dag_id='tfidf_train_dag',
-    start_date=datetime(2026, 1, 2, tz="Europe/Rome"), 
-    schedule="30 8 * * *",  # Ежедневно в 08:30 утра
+    start_date=datetime(2026, 1, 1), 
+    schedule=CronDataIntervalTimetable("30 8 * * *", timezone="Europe/Rome"),  # Ежедневно в 08:30 утра
     catchup=True,
     max_active_runs=1,
     tags=['youtube', 'sentiment_analysis'],
